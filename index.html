@@ -343,15 +343,33 @@ for (const k in M){ M[k].side = 2; M[k].needsUpdate = true; }   // 双面，避�
 const glbCache = {};
 function loadGLB(name){ return glbCache[name] ||= new Promise((res, rej) => loader.load('./assets/'+name+'.glb', g => res(g), undefined, rej)); }
 function makeLabel(text){
+  const lines = String(text).split('\n');
   const c = document.createElement('canvas'); c.width = c.height = 256;
   const ctx = c.getContext('2d');
-  ctx.font = 'bold 110px "Microsoft YaHei",sans-serif';
+  const fontOf = (sz) => 'bold ' + sz + 'px "Microsoft YaHei",sans-serif';
+  // 主行：栋号/名称
+  let fs1 = 110;
+  ctx.font = fontOf(fs1);
+  let w1 = ctx.measureText(lines[0]).width;
+  if (w1 > 222) fs1 = Math.max(46, Math.floor(fs1 * 222 / w1));
+  // 次行：工区
+  const fs2 = Math.round(fs1 * 0.56);
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.lineWidth = 14; ctx.strokeStyle = 'rgba(0,0,0,.85)'; ctx.strokeText(text,128,128);
-  ctx.fillStyle = '#ffd34d'; ctx.fillText(text,128,128);
+  const y1 = lines.length > 1 ? 92 : 128;
+  const y2 = 190;
+  ctx.font = fontOf(fs1);
+  ctx.lineWidth = 12; ctx.strokeStyle = 'rgba(0,0,0,.85)';
+  ctx.strokeText(lines[0], 128, y1);
+  ctx.fillStyle = '#ffd34d'; ctx.fillText(lines[0], 128, y1);
+  if (lines.length > 1){
+    ctx.font = fontOf(fs2);
+    ctx.lineWidth = 10; ctx.strokeStyle = 'rgba(0,0,0,.85)';
+    ctx.strokeText(lines[1], 128, y2);
+    ctx.fillStyle = '#cfe3ff'; ctx.fillText(lines[1], 128, y2);
+  }
   const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
-  sp.scale.set(10,10,1); return sp;   // 栋号缩小到原来的 1/3
+  sp.scale.set(10, 10, 1); return sp;
 }
 window.progressData = {}; window.floorsData = {};
 const buildings = [];
@@ -521,7 +539,14 @@ Promise.all([
     buildings.push({ name: b, root: obj, meshes, box });
     const ctr = box.getCenter(new THREE.Vector3());
     const labelLift = (b === 'S12' || b === 'S13') ? -19.6 : 1.6;   // S12/S13 标注再降 10 m
-    const sp = makeLabel(b + '#'); sp.position.set(ctr.x, box.max.y + labelLift, ctr.z);
+    const ZONE_OF = { '26':'一工区','27':'一工区','28':'一工区','35':'一工区','42':'一工区','51':'一工区','S10':'一工区','S11':'一工区','S5':'一工区',
+                      '29':'二工区','30':'二工区','36':'二工区','37':'二工区','43':'二工区','44':'二工区','52':'二工区','S12':'二工区',
+                      '31':'三工区','38':'三工区','45':'三工区','46':'三工区','53':'三工区','54':'三工区','55':'三工区','S13':'三工区' };
+    const baseName = (b === 'S5') ? 'S5幼儿园'
+                    : (b === 'S10' || b === 'S11' || b === 'S12' || b === 'S13') ? (b + '商业')
+                    : (b + '#');
+    const labelText = baseName + (ZONE_OF[b] ? ('\n' + ZONE_OF[b]) : '');
+    const sp = makeLabel(labelText); sp.position.set(ctr.x, box.max.y + labelLift, ctr.z);
     if (b === 'S12' || b === 'S13') sp.position.z -= 10;   // 标注往北移 10 m
     (window.__labels = window.__labels || {})[b] = sp;
     scene.add(sp);
