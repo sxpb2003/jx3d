@@ -483,6 +483,11 @@ Promise.all([
       it.isWin = it.hRatio > 0.55;   // 跨越多层的整体门窗网格
       it.isRoof = (mb.max.y >= box.max.y - 3.0);   // 屋面：楼顶 3 m 内的网格
     }
+    // 移除“倒三角”构件：43 号楼（及同模板 42/45）里的 87335342_2 是那块大三角面片
+    for (const it of meshes){
+      const nm = (it.mesh.name || '');
+      if (nm.indexOf('87335342_2') === 0){ it.mesh.visible = false; window.__spikeHidden = (window.__spikeHidden || 0) + 1; }
+    }
     buildings.push({ name: b, root: obj, meshes, box });
     const ctr = box.getCenter(new THREE.Vector3());
     const labelLift = (b === 'S12' || b === 'S13') ? -9.6 : 1.6;   // S12/S13 标注再往下降 10 m
