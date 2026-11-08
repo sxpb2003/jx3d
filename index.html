@@ -4,10 +4,10 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<title>江峡三路小区 3D（进度截至 2026-11-06）</title>
+<title>江峡三路迁建（进度截至 2026-11-06）</title>
 <style>
 html,body{margin:0;height:100%;overflow:hidden;background:#20242a;font-family:system-ui,"Microsoft YaHei",sans-serif}
-#hud{position:fixed;left:10px;top:10px;color:#fff;font-size:13px;line-height:1.6;background:rgba(0,0,0,.35);padding:8px 12px;border-radius:8px;pointer-events:none}
+#hud{position:fixed;left:10px;top:10px;color:#fff;font-size:13px;line-height:1.6;background:rgba(0,0,0,.35);padding:8px 12px;border-radius:8px;pointer-events:none;white-space:nowrap;max-width:96vw}
 #zones{position:fixed;left:10px;top:120px;color:#fff;font-size:13px;background:rgba(0,0,0,.45);padding:10px 12px;border-radius:10px;line-height:1.8;pointer-events:none}
 #zones b{color:#ffd34d}
 #zones table{border-collapse:collapse}
@@ -26,7 +26,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#20242a;font-family:sy
                   flex: 0 0 auto !important; border-radius: 7px !important; background: #ffffff !important; color: #111111 !important;
                   border: 1px solid rgba(0,0,0,.25) !important; width: auto !important;
                   box-shadow: 0 1px 4px rgba(0,0,0,.35) !important; text-shadow: none !important; }
-  #hud { font-size: 12px; max-width: 70vw; }
+  #hud { font-size: 12px; max-width: 96vw; }
 }
 </style>
 <script type="importmap">
@@ -34,7 +34,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#20242a;font-family:sy
 </script>
 </head><body>
 <div id="hud">
-  <div style="font-weight:700;font-size:15px;color:#ffd34d;letter-spacing:1px">江峡三路小区 3D<span style="font-size:12px;color:#ffe9a8;margin-left:8px">进度截至 2026-11-06</span></div>
+  <div style="font-weight:700;font-size:15px;color:#ffd34d;letter-spacing:1px;white-space:nowrap">江峡三路迁建<span style="font-size:11px;color:#ffe9a8;margin-left:6px">进度截至 2026-11-06</span></div>
   <div id="proc" style="font-size:26px;font-weight:700;color:#ff2d2d;line-height:1.25;margin:2px 0 6px;text-shadow:0 1px 3px rgba(0,0,0,.6)">加载中…</div>
   <div id="sw" style="display:flex;align-items:center;gap:8px;margin-bottom:4px"></div>
   <div id="hint" style="font-size:13px;color:#e8e8e8">单指拖动旋转 · 双指捏合缩放</div>
@@ -160,6 +160,47 @@ function stripGroundSlabs(mesh, maxY){
       const cyy = (ay+by+cy)/3;
       if (area > 12 && horiz > 0.85 && cyy < maxY){ removed++; continue; }  // 地面大平板（屏幕上呈黑三角）
     }
+    keep.push(a,b,c);
+  }
+  if (removed && keep.length){ g.setIndex(keep); g.computeVertexNormals(); }
+  return removed;
+}
+function stripDegenerate(mesh){
+  const g = mesh.geometry, pos = g && g.attributes && g.attributes.position;
+  if (!pos) return 0;
+  let idxArr;
+  if (g.index) idxArr = g.index.array;
+  else { const n = pos.count; idxArr = new Uint32Array(n); for (let i = 0; i < n; i++) idxArr[i] = i; }
+  const keep = []; let removed = 0;
+  for (let t = 0; t < idxArr.length; t += 3){
+    const a = idxArr[t], b = idxArr[t+1], c = idxArr[t+2];
+    const ax=pos.getX(a), ay=pos.getY(a), az=pos.getZ(a);
+    const bx=pos.getX(b), by=pos.getY(b), bz=pos.getZ(b);
+    const cx=pos.getX(c), cy=pos.getY(c), cz=pos.getZ(c);
+    const ux=bx-ax, uy=by-ay, uz=bz-az, vx=cx-ax, vy=cy-ay, vz=cz-az;
+    const nx=uy*vz-uz*vy, ny=uz*vx-ux*vz, nz=ux*vy-uy*vx;
+    const area2 = nx*nx+ny*ny+nz*nz;
+    if (area2 < 1e-9){ removed++; continue; }   // 仅删除严格零面积三角形
+    keep.push(a,b,c);
+  }
+  if (removed && keep.length){ g.setIndex(keep); g.computeVertexNormals(); }
+  return removed;
+}
+function stripLongEdges(mesh, maxLen){
+  const g = mesh.geometry, pos = g && g.attributes && g.attributes.position;
+  if (!pos) return 0;
+  let idxArr;
+  if (g.index) idxArr = g.index.array;
+  else { const n = pos.count; idxArr = new Uint32Array(n); for (let i = 0; i < n; i++) idxArr[i] = i; }
+  const keep = []; let removed = 0;
+  const d2 = (a, b) => {
+    const dx = pos.getX(a)-pos.getX(b), dy = pos.getY(a)-pos.getY(b), dz = pos.getZ(a)-pos.getZ(b);
+    return dx*dx + dy*dy + dz*dz;
+  };
+  const lim = maxLen * maxLen;
+  for (let t = 0; t < idxArr.length; t += 3){
+    const a = idxArr[t], b = idxArr[t+1], c = idxArr[t+2];
+    if (d2(a,b) > lim || d2(b,c) > lim || d2(c,a) > lim){ removed++; continue; }
     keep.push(a,b,c);
   }
   if (removed && keep.length){ g.setIndex(keep); g.computeVertexNormals(); }
@@ -417,7 +458,7 @@ Promise.all([
     const cutY = roofTop + 0.6;
     obj.traverse(o => {
       if (!o.isMesh) return;
-      removeNeedles(o);
+      stripDegenerate(o);
       const mats = Array.isArray(o.material) ? o.material : [o.material];
       for (const mm of mats){ if (mm){ mm.side = 2; mm.needsUpdate = true; } }   // 双面渲染，避免背面纯黑
       meshes.push({ mesh: o, orig: o.material });
