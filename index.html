@@ -86,6 +86,54 @@ function updateHint(){
 }
 updateHint();
 addEventListener('resize', updateHint);
+function stripDarkFaces(mesh, keepBelowY){
+  const mat = mesh.material; if (!mat || !mat.color) return 0;
+  const sum = mat.color.r + mat.color.g + mat.color.b;
+  if (sum > 0.5) return 0;
+  const g = mesh.geometry; const pos = g.attributes.position;
+  if (!pos || !g.index) return 0;
+  const idxArr = g.index.array; const keep = []; let removed = 0;
+  for (let t = 0; t < idxArr.length; t += 3){
+    const a = idxArr[t], b = idxArr[t+1], c = idxArr[t+2];
+    const ax = pos.getX(a), ay = pos.getY(a), az = pos.getZ(a);
+    const bx = pos.getX(b), by = pos.getY(b), bz = pos.getZ(b);
+    const cx = pos.getX(c), cy = pos.getY(c), cz = pos.getZ(c);
+    const ux = bx-ax, uy = by-ay, uz = bz-az;
+    const vx = cx-ax, vy = cy-ay, vz = cz-az;
+    const nx = uy*vz-uz*vy, ny = uz*vx-ux*vz, nz = ux*vy-uy*vx;
+    const area = 0.5*Math.sqrt(nx*nx+ny*ny+nz*nz);
+    const maxY = Math.max(ay, by, cy);
+    if (area > 6 && maxY > keepBelowY){ removed++; continue; }
+    keep.push(a, b, c);
+  }
+  if (removed && keep.length){ g.setIndex(keep); g.computeVertexNormals(); }
+  return removed;
+}
+function removeNeedles(mesh){
+  const g = mesh.geometry; if (!g || !g.attributes || !g.attributes.position) return 0;
+  const pos = g.attributes.position;
+  const idxArr = g.index ? g.index.array : null;
+  const triCount = idxArr ? idxArr.length / 3 : pos.count / 3;
+  const keep = [];
+  let removed = 0;
+  const A = new THREE.Vector3(), B = new THREE.Vector3(), C = new THREE.Vector3();
+  for (let t = 0; t < triCount; t++){
+    const ia = idxArr ? idxArr[t*3]   : t*3;
+    const ib = idxArr ? idxArr[t*3+1] : t*3+1;
+    const ic = idxArr ? idxArr[t*3+2] : t*3+2;
+    A.fromBufferAttribute(pos, ia); B.fromBufferAttribute(pos, ib); C.fromBufferAttribute(pos, ic);
+    const e1 = A.distanceTo(B), e2 = B.distanceTo(C), e3 = C.distanceTo(A);
+    const mx = Math.max(e1, e2, e3), mn = Math.min(e1, e2, e3);
+    // 细长/退化三角形（压缩后常见的黑色尖刺）
+    if ((mx > 3 && mn < 0.03) || (mx > 1 && mx / Math.max(mn, 1e-6) > 400)){ removed++; continue; }
+    keep.push(ia, ib, ic);
+  }
+  if (removed > 0 && keep.length){
+    g.setIndex(keep);
+    g.computeVertexNormals();
+  }
+  return removed;
+}
 function setHud(mode, loadingText){
   if (!procEl) return;
   if (loadingText){
@@ -305,8 +353,10 @@ Promise.all([
     const obj = glb.scene.clone(true);
     obj.applyMatrix4(new THREE.Matrix4().fromArray(info.m));
     scene.add(obj);
+    const box0 = new THREE.Box3().setFromObject(obj);
     const meshes = [];
-    obj.traverse(o => { if (o.isMesh) meshes.push({ mesh: o, orig: o.material }); });
+    const roofY = box0.max.y - 3;
+    obj.traverse(o => { if (o.isMesh) { removeNeedles(o); stripDarkFaces(o, roofY); meshes.push({ mesh: o, orig: o.material }); } });
     const box = new THREE.Box3().setFromObject(obj);
     buildings.push({ name: b, root: obj, meshes, box });
     const ctr = box.getCenter(new THREE.Vector3());
