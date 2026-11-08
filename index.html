@@ -200,6 +200,22 @@ function stripDegenerate(mesh){
   if (removed && keep.length){ g.setIndex(keep); g.computeVertexNormals(); }
   return removed;
 }
+// 只对指定楼栋：删除跨度过大的异常三角形（倒三角/尖刺），最大边 > 25 m
+function stripLongTriangles(o, MAXEDGE = 25){
+  const g = o.geometry; if (!g || !g.index) return;
+  const pos = g.attributes.position, idxA = g.index, n = idxA.count / 3;
+  const keep = [];
+  for (let t = 0; t < n; t++){
+    const a = idxA.getX(t*3), b1 = idxA.getX(t*3+1), c1 = idxA.getX(t*3+2);
+    const ax = pos.getX(a), ay = pos.getY(a), az = pos.getZ(a);
+    const bx = pos.getX(b1), by = pos.getY(b1), bz = pos.getZ(b1);
+    const cx = pos.getX(c1), cy = pos.getY(c1), cz = pos.getZ(c1);
+    const d = Math.max(Math.hypot(ax-bx, ay-by, az-bz), Math.hypot(bx-cx, by-cy, bz-cz), Math.hypot(cx-ax, cy-ay, cz-az));
+    if (d <= MAXEDGE) keep.push(a, b1, c1);
+  }
+  if (keep.length < idxA.count){ g.setIndex(keep); g.computeBoundingSphere(); }
+}
+
 function stripLongEdges(mesh, maxLen){
   const g = mesh.geometry, pos = g && g.attributes && g.attributes.position;
   if (!pos) return 0;
@@ -460,6 +476,7 @@ Promise.all([
   window.progressData = pg; window.floorsData = fl; window.roofData = rf; roofData = rf;
   const names = Object.keys(bj); let done = 0;
   for (const b of names){
+    const buildingName = b;
     const info = bj[b];
     const glb = await loadGLB(info.stem.replace(/#/g,''));
     const obj = glb.scene.clone(true);
@@ -474,6 +491,7 @@ Promise.all([
     obj.traverse(o => {
       if (!o.isMesh) return;
       stripDegenerate(o);
+      if (buildingName === 'S12' || buildingName === 'S13') stripLongTriangles(o);
       const mats = Array.isArray(o.material) ? o.material : [o.material];
       for (const mm of mats){ if (mm){ mm.side = 2; mm.needsUpdate = true; } }   // 双面渲染，避免背面纯黑
       meshes.push({ mesh: o, orig: o.material });
@@ -502,7 +520,7 @@ Promise.all([
     }
     buildings.push({ name: b, root: obj, meshes, box });
     const ctr = box.getCenter(new THREE.Vector3());
-    const labelLift = (b === 'S12' || b === 'S13') ? -9.6 : 1.6;   // S12/S13 标注再往下降 10 m
+    const labelLift = (b === 'S12' || b === 'S13') ? -19.6 : 1.6;   // S12/S13 标注再降 10 m
     const sp = makeLabel(b + '#'); sp.position.set(ctr.x, box.max.y + labelLift, ctr.z);
     if (b === 'S12' || b === 'S13') sp.position.z -= 10;   // 标注往北移 10 m
     (window.__labels = window.__labels || {})[b] = sp;
