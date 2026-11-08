@@ -318,7 +318,7 @@ function applyMode(m){
     for (const it of b.meshes){
       const nm = (it.orig && it.orig.name) || '';
       const isGlass = GLASS_RE.test(nm);
-      if (m === 'orig' || isGlass){ it.mesh.material = it.orig; continue; }
+      if (m === 'orig' || isGlass || it.isWin){ it.mesh.material = it.orig; continue; }
       const box = new THREE.Box3().setFromObject(it.mesh);
       const y = (box.min.y + box.max.y) / 2;
       if (isRoof(b.name, y)){
@@ -451,6 +451,12 @@ Promise.all([
       meshes.push({ mesh: o, orig: o.material });
     });
     const box = new THREE.Box3().setFromObject(obj);
+    const bH = Math.max(1e-6, box.max.y - box.min.y);
+    for (const it of meshes){
+      const mb = new THREE.Box3().setFromObject(it.mesh);
+      it.hRatio = (mb.max.y - mb.min.y) / bH;
+      it.isWin = it.hRatio > 0.55;   // 跨越多层的整体门窗网格
+    }
     buildings.push({ name: b, root: obj, meshes, box });
     const ctr = box.getCenter(new THREE.Vector3());
     const labelLift = (b === 'S12' || b === 'S13') ? 0.4 : 1.6;
