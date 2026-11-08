@@ -68,6 +68,7 @@ fetch('./cad_lines.bin').then(r => r.arrayBuffer()).then(buf => {
   g.setAttribute('position', new THREE.BufferAttribute(arr, 3));
   const m = new THREE.LineBasicMaterial({ color: 0xff2fd0, transparent: true, opacity: 0.9 });
   const lines = new THREE.LineSegments(g, m);
+  lines.position.y = 157 - 154.9;   // 底图抬到 157 m 标高
   lines.renderOrder = 1;
   scene.add(lines);
   window.__cad = lines;
