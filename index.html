@@ -41,6 +41,8 @@ html,body{margin:0;height:100%;overflow:hidden;background:#20242a;font-family:sy
 </div>
 <div id="zones">工区完成比例</div>
 <div id="legend" style="position:fixed;left:50%;transform:translateX(-50%);bottom:62px;color:#fff;font-size:13px;background:rgba(0,0,0,.45);padding:10px 12px;border-radius:10px;line-height:1.9;pointer-events:none"></div>
+<a id="toTL" href="./tl/index.html" style="position:fixed;right:10px;top:10px;z-index:20;color:#7fd1ff;font:12px system-ui;background:rgba(0,0,0,.45);padding:7px 10px;border-radius:8px;text-decoration:none">试验版：时间线 ▶</a>
+<button id="btnScaffold" style="position:fixed;right:10px;top:46px;z-index:20;color:#fff;font:12px system-ui;background:rgba(0,0,0,.5);padding:7px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.35);cursor:pointer">外架：显示</button>
 <div id="modes" style="position:fixed;left:50%;transform:translateX(-50%);bottom:14px;display:flex;gap:8px;background:rgba(0,0,0,.45);padding:8px;border-radius:10px">
 <button data-mode="nei" style="padding:8px 14px;border-radius:8px;border:0;cursor:pointer">内粉</button>
 <button data-mode="wai" style="padding:8px 14px;border-radius:8px;border:0;cursor:pointer">外粉</button>
@@ -68,7 +70,7 @@ fetch('./cad_lines.bin').then(r => r.arrayBuffer()).then(buf => {
   g.setAttribute('position', new THREE.BufferAttribute(arr, 3));
   const m = new THREE.LineBasicMaterial({ color: 0xff2fd0, transparent: true, opacity: 0.9 });
   const lines = new THREE.LineSegments(g, m);
-  lines.position.y = 157 - 154.9;   // 底图抬到 157 m 标高
+  lines.position.y = 157.0;   // bin 导出时 y≈0，这里直接抬到 157 m 标高
   lines.renderOrder = 1;
   scene.add(lines);
   window.__cad = lines;
@@ -475,6 +477,15 @@ Promise.all([
       const mats = Array.isArray(o.material) ? o.material : [o.material];
       for (const mm of mats){ if (mm){ mm.side = 2; mm.needsUpdate = true; } }   // 双面渲染，避免背面纯黑
       meshes.push({ mesh: o, orig: o.material });
+      // 记录大尺寸半透明面片（外架/挑檐/玻璃幕），用于“外架”开关
+      try {
+        const mm = Array.isArray(o.material) ? o.material[0] : o.material;
+        if (mm && mm.transparent && mm.opacity < 0.95){
+          const bb = new THREE.Box3().setFromObject(o);
+          const sz = bb.getSize(new THREE.Vector3());
+          if (Math.max(sz.x, sz.z) > 18){ (window.__sheetMeshes = window.__sheetMeshes || []).push(o); }
+        }
+      } catch(e){}
     });
     const box = new THREE.Box3().setFromObject(obj);
     const bH = Math.max(1e-6, box.max.y - box.min.y);
@@ -584,6 +595,13 @@ const CYCLE = ['nei', 'wai', 'rooffs', 'roofgw'];
 let cyc = 0;
 let autoTimer = setInterval(() => { cyc = (cyc + 1) % CYCLE.length; applyMode(CYCLE[cyc]); }, 10000);
 window.stopCycle = function(){ clearInterval(autoTimer); };
+document.getElementById('btnScaffold')?.addEventListener('click', function(ev){
+  const arr = window.__sheetMeshes || [];
+  const hide = !window.__sheetHidden;
+  window.__sheetHidden = hide;
+  arr.forEach(function(m){ m.visible = !hide; });
+  ev.target.textContent = '外架：' + (hide ? '隐藏' : '显示');
+});
 document.getElementById('modes').addEventListener('click', ev => {
   const m = ev.target && ev.target.dataset && ev.target.dataset.mode;
   if (m) { window.stopCycle && window.stopCycle(); applyMode(m); }
