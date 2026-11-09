@@ -408,10 +408,20 @@ function applyMode(m){
     for (const it of b.meshes){
       const nm = (it.orig && it.orig.name) || '';
       const isGlass = GLASS_RE.test(nm);
-      if (m === 'orig' || isGlass || it.isWin){ it.mesh.material = it.orig; continue; }
+      if (m === 'orig'){ it.mesh.material = it.orig; continue; }
+      // 屋面优先判定：屋面（含采光顶玻璃）先染色，避免被“门窗/玻璃不染色”规则挡掉
+      if (it.isRoof && m.startsWith('roof')){
+        const rd0 = roofData[b.name] || {};
+        const key0 = m === 'rooffs' ? 'fangshui' : (m === 'roofbh' ? 'baohu' : 'guawa');
+        const st0 = rd0[key0] || '—';
+        if (m === 'roofgw') it.mesh.material = (st0 === '完成') ? M.roof_done : it.orig;
+        else it.mesh.material = st0 === '完成' ? M.roof_done : (st0 === '施工中' ? M.roof_ing : it.orig);
+        continue;
+      }
+      if (isGlass || it.isWin){ it.mesh.material = it.orig; continue; }
       const box = new THREE.Box3().setFromObject(it.mesh);
       const y = (box.min.y + box.max.y) / 2;
-      if (it.isRoof || isRoof(b.name, y)){
+      if (it.isRoof){
         if (m.startsWith('roof')){
           const rd = roofData[b.name] || {};
           const key = m === 'rooffs' ? 'fangshui' : (m === 'roofbh' ? 'baohu' : 'guawa');
@@ -529,7 +539,9 @@ Promise.all([
       const mb = new THREE.Box3().setFromObject(it.mesh);
       it.hRatio = (mb.max.y - mb.min.y) / bH;
       it.isWin = it.hRatio > 0.55;   // 跨越多层的整体门窗网格
-      it.isRoof = (mb.max.y >= box.max.y - 3.0);   // 屋面：楼顶 3 m 内的网格
+      const roofTol = (b === 'S11') ? 3.6 : 1.5;   // 屋面识别容差（S11 屋面在女儿墙下 3.2 m，单独放宽）
+      const ext = mb.max.y - mb.min.y;
+      it.isRoof = (mb.max.y >= box.max.y - roofTol) && (ext <= Math.max(2.5, bH * 0.36));
     }
     // 移除“倒三角”构件：43 号楼（及同模板 42/45）里的 87335342_2 是那块大三角面片
     for (const it of meshes){
