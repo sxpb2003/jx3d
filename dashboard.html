@@ -1,0 +1,862 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>江峡三路 · 调度看板</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:#20242a;font-family:system-ui,"Microsoft YaHei",sans-serif}
+#hud{position:fixed;left:10px;top:10px;color:#fff;font-size:13px;line-height:1.6;background:rgba(0,0,0,.35);padding:8px 12px;border-radius:8px;pointer-events:none;white-space:nowrap;max-width:96vw}
+#zones{position:fixed;left:10px;top:120px;color:#fff;font-size:13px;background:rgba(0,0,0,.45);padding:10px 12px;border-radius:10px;line-height:1.8;pointer-events:none}
+#zones b{color:#ffd34d}
+#zones table{border-collapse:collapse}
+#zones td,#zones th{padding:2px 8px;text-align:right}
+#zones th{color:#9fd0ff;font-weight:600;text-align:center}
+#zones td:first-child{text-align:left;color:#ddd}
+#hud b{color:#ffd34d}
+@media (max-width: 900px), (hover: none) and (pointer: coarse) {
+  #zones, #legend { display: none !important; }
+  #modes { left: 0 !important; right: 0 !important; top: auto !important; bottom: 10px !important; transform: none !important;
+           flex-direction: row !important; flex-wrap: wrap !important; align-items: center !important; justify-content: center !important;
+           background: transparent !important; padding: 0 8px !important; gap: 6px !important; overflow: visible !important;
+           border-radius: 0 !important; width: auto !important; }
+  #modes button { writing-mode: horizontal-tb !important; text-orientation: mixed !important; letter-spacing: .5px !important;
+                  padding: 7px 10px !important; font-size: 13px !important; line-height: 1.1 !important; white-space: nowrap !important;
+                  flex: 0 0 auto !important; border-radius: 7px !important; background: #ffffff !important; color: #111111 !important;
+                  border: 1px solid rgba(0,0,0,.25) !important; width: auto !important;
+                  box-shadow: 0 1px 4px rgba(0,0,0,.35) !important; text-shadow: none !important; }
+  #hud { font-size: 12px; max-width: 96vw; }
+}
+#zones{display:none !important}
+#toTL{display:none !important}
+
+/* mobile plan pos */
+@media (max-width: 900px){
+  #boardPlan{bottom:200px !important;max-height:36vh;overflow:auto;font-size:10px}
+  #boardPlan th,#boardPlan td{padding:1px 5px;font-size:10px}
+}
+</style>
+<script type="importmap">
+{"imports":{"three":"./lib/three.module.js","three/addons/":"./lib/"}}
+</script>
+</head><body>
+<div id="hud">
+  <div style="font-weight:700;font-size:15px;color:#ffd34d;letter-spacing:1px;white-space:nowrap">江峡三路迁建<span style="font-size:11px;color:#ffe9a8;margin-left:6px">进度截至 2026-11-06</span></div>
+  <div id="proc" style="font-size:26px;font-weight:700;color:#ff2d2d;line-height:1.25;margin:2px 0 6px;text-shadow:0 1px 3px rgba(0,0,0,.6)">加载中…</div>
+  <div id="sw" style="display:flex;align-items:center;gap:8px;margin-bottom:4px"></div>
+  <div id="hint" style="font-size:13px;color:#e8e8e8">单指拖动旋转 · 双指捏合缩放</div>
+</div>
+<div id="zones">工区完成比例</div>
+<div id="legend" style="position:fixed;left:50%;transform:translateX(-50%);bottom:62px;color:#fff;font-size:13px;background:rgba(0,0,0,.45);padding:10px 12px;border-radius:10px;line-height:1.9;pointer-events:none"></div>
+<a id="toTL" href="./tl/index.html" style="position:fixed;right:10px;top:10px;z-index:20;color:#7fd1ff;font:12px system-ui;background:rgba(0,0,0,.45);padding:7px 10px;border-radius:8px;text-decoration:none">试验版：时间线 ▶</a>
+<button id="btnScaffold" style="position:fixed;right:10px;top:46px;z-index:20;color:#fff;font:12px system-ui;background:rgba(0,0,0,.5);padding:7px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.35);cursor:pointer">外架：显示</button>
+<div id="modes" style="position:fixed;left:50%;transform:translateX(-50%);bottom:14px;display:flex;gap:8px;background:rgba(0,0,0,.45);padding:8px;border-radius:10px">
+<button data-mode="nei" style="padding:8px 14px;border-radius:8px;border:0;cursor:pointer">内粉</button>
+<button data-mode="wai" style="padding:8px 14px;border-radius:8px;border:0;cursor:pointer">外粉</button>
+<button data-mode="rooffs" style="padding:8px 14px;border-radius:8px;border:0;cursor:pointer">屋面防水</button>
+<button data-mode="roofgw" style="padding:8px 14px;border-radius:8px;border:0;cursor:pointer">屋面挂瓦</button>
+</div>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from './lib/OrbitControls.js';
+import { GLTFLoader } from './lib/GLTFLoader.js';
+import { DRACOLoader } from './lib/DRACOLoader.js';
+window.__THREE = THREE;
+
+function vpW(){ return Math.max(1, window.innerWidth || document.documentElement.clientWidth || 360); }
+function vpH(){ return Math.max(1, window.innerHeight || document.documentElement.clientHeight || 640); }
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.setSize(vpW(), vpH());
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+// CAD 底图（洋红细线）
+fetch('./cad_lines.bin').then(r => r.arrayBuffer()).then(buf => {
+  const arr = new Float32Array(buf);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(arr, 3));
+  const m = new THREE.LineBasicMaterial({ color: 0xff2fd0, transparent: true, opacity: 0.9 });
+  const lines = new THREE.LineSegments(g, m);
+  lines.position.y = 157.0;   // bin 导出时 y≈0，这里直接抬到 157 m 标高
+  lines.renderOrder = 1;
+  scene.add(lines);
+  window.__cad = lines;
+}).catch(e => console.warn('CAD 底图加载失败', e));
+scene.background = new THREE.Color(0x9fb3c8);
+scene.fog = new THREE.Fog(0x9fb3c8, 1400, 3600);
+const camera = new THREE.PerspectiveCamera(32, vpW()/vpH(), 0.5, 20000);
+const controls = new OrbitControls(camera, renderer.domElement);
+window.camera = camera; window.controls = controls;
+scene.add(new THREE.HemisphereLight(0xffffff, 0x8a97a5, 2.6));
+scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+const fill = new THREE.DirectionalLight(0xffffff, 0.9);
+fill.position.set(-400, 260, 520); scene.add(fill);
+const fill2 = new THREE.DirectionalLight(0xffffff, 0.5);
+fill2.position.set(-300, -120, -400); scene.add(fill2);
+const dir = new THREE.DirectionalLight(0xffffff, 2.2); dir.position.set(300, 1200, -300); scene.add(dir);
+const grid = new THREE.GridHelper(2000, 100, 0x556070, 0x66788a); grid.position.y = 156.0; scene.add(grid);
+const procEl = document.getElementById('proc');
+const swEl = document.getElementById('sw');
+const MODE_NAME = { nei:'内墙抹灰', wai:'外墙抹灰', rooffs:'屋面防水', roofbh:'屋面防水保护层', roofgw:'屋面挂瓦', orig:'原始外观' };
+const MODE_COLORS = {
+  nei:  ['#1857c9', '#8ede6a', '#ffffff'],
+  wai:  ['#e01b1b', '#f2c200', '#ffffff'],
+  rooffs:['#6b4f2a', '#c9a227', '#ffffff'],
+  roofbh:['#6b4f2a', '#c9a227', '#ffffff'],
+  roofgw:['#6b4f2a']
+};
+function updateHint(){
+  const el = document.getElementById('hint'); if (!el) return;
+  const touch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || matchMedia('(pointer: coarse)').matches;
+  el.textContent = touch ? '单指拖动旋转 · 双指捏合缩放' : '左键拖动旋转 · 滚轮缩放';
+}
+updateHint();
+addEventListener('resize', updateHint);
+function stripDarkFaces(mesh, keepBelowY){
+  const mat = mesh.material; if (!mat || !mat.color) return 0;
+  const sum = mat.color.r + mat.color.g + mat.color.b;
+  if (sum > 0.5) return 0;
+  const g = mesh.geometry; const pos = g.attributes.position;
+  if (!pos) return 0;
+  let idxArr;
+  if (g.index) idxArr = g.index.array;
+  else { const n = pos.count; idxArr = new Uint32Array(n); for (let i = 0; i < n; i++) idxArr[i] = i; }
+  const keep = []; let removed = 0;
+  for (let t = 0; t < idxArr.length; t += 3){
+    const a = idxArr[t], b = idxArr[t+1], c = idxArr[t+2];
+    const ax = pos.getX(a), ay = pos.getY(a), az = pos.getZ(a);
+    const bx = pos.getX(b), by = pos.getY(b), bz = pos.getZ(b);
+    const cx = pos.getX(c), cy = pos.getY(c), cz = pos.getZ(c);
+    const ux = bx-ax, uy = by-ay, uz = bz-az;
+    const vx = cx-ax, vy = cy-ay, vz = cz-az;
+    const nx = uy*vz-uz*vy, ny = uz*vx-ux*vz, nz = ux*vy-uy*vx;
+    const area = 0.5*Math.sqrt(nx*nx+ny*ny+nz*nz);
+    const maxY = Math.max(ay, by, cy);
+    if (area > 6 && maxY > keepBelowY){ removed++; continue; }
+    keep.push(a, b, c);
+  }
+  if (removed && keep.length){ g.setIndex(keep); g.computeVertexNormals(); }
+  return removed;
+}
+function stripAboveRoof(mesh, minY){
+  const g = mesh.geometry, pos = g && g.attributes && g.attributes.position;
+  if (!pos) return 0;
+  let idxArr;
+  if (g.index) idxArr = g.index.array;
+  else { const n = pos.count; idxArr = new Uint32Array(n); for (let i = 0; i < n; i++) idxArr[i] = i; }
+  const keep = []; let removed = 0;
+  for (let t = 0; t < idxArr.length; t += 3){
+    const a = idxArr[t], b = idxArr[t+1], c = idxArr[t+2];
+    const ya = pos.getY(a), yb = pos.getY(b), yc = pos.getY(c);
+    if (ya > minY && yb > minY && yc > minY){
+      const ax = pos.getX(a), az = pos.getZ(a), bx = pos.getX(b), bz = pos.getZ(b), cx = pos.getX(c), cz = pos.getZ(c);
+      const ux = bx-ax, uy = yb-ya, uz = bz-az, vx = cx-ax, vy = yc-ya, vz = cz-az;
+      const nx = uy*vz-uz*vy, ny = uz*vx-ux*vz, nz = ux*vy-uy*vx;
+      const area = 0.5*Math.sqrt(nx*nx+ny*ny+nz*nz);
+      if (area > 0.05){ removed++; continue; }   // 高出屋面的孤立三角形（黑色尖刺）
+    }
+    keep.push(a, b, c);
+  }
+  if (removed && keep.length){ g.setIndex(keep); g.computeVertexNormals(); }
+  return removed;
+}
+function stripGroundSlabs(mesh, maxY){
+  const g = mesh.geometry, pos = g && g.attributes && g.attributes.position;
+  if (!pos) return 0;
+  let idxArr;
+  if (g.index) idxArr = g.index.array;
+  else { const n = pos.count; idxArr = new Uint32Array(n); for (let i = 0; i < n; i++) idxArr[i] = i; }
+  const keep = []; let removed = 0;
+  for (let t = 0; t < idxArr.length; t += 3){
+    const a = idxArr[t], b = idxArr[t+1], c = idxArr[t+2];
+    const ax=pos.getX(a), ay=pos.getY(a), az=pos.getZ(a);
+    const bx=pos.getX(b), by=pos.getY(b), bz=pos.getZ(b);
+    const cx=pos.getX(c), cy=pos.getY(c), cz=pos.getZ(c);
+    const ux=bx-ax, uy=by-ay, uz=bz-az, vx=cx-ax, vy=cy-ay, vz=cz-az;
+    const nx=uy*vz-uz*vy, ny=uz*vx-ux*vz, nz=ux*vy-uy*vx;
+    const nl=Math.sqrt(nx*nx+ny*ny+nz*nz);
+    if (nl > 0){
+      const area = 0.5*nl;
+      const horiz = Math.abs(ny)/nl;
+      const cyy = (ay+by+cy)/3;
+      if (area > 12 && horiz > 0.85 && cyy < maxY){ removed++; continue; }  // 地面大平板（屏幕上呈黑三角）
+    }
+    keep.push(a,b,c);
+  }
+  if (removed && keep.length){ g.setIndex(keep); g.computeVertexNormals(); }
+  return removed;
+}
+function stripDegenerate(mesh){
+  const g = mesh.geometry, pos = g && g.attributes && g.attributes.position;
+  if (!pos) return 0;
+  let idxArr;
+  if (g.index) idxArr = g.index.array;
+  else { const n = pos.count; idxArr = new Uint32Array(n); for (let i = 0; i < n; i++) idxArr[i] = i; }
+  const keep = []; let removed = 0;
+  for (let t = 0; t < idxArr.length; t += 3){
+    const a = idxArr[t], b = idxArr[t+1], c = idxArr[t+2];
+    const ax=pos.getX(a), ay=pos.getY(a), az=pos.getZ(a);
+    const bx=pos.getX(b), by=pos.getY(b), bz=pos.getZ(b);
+    const cx=pos.getX(c), cy=pos.getY(c), cz=pos.getZ(c);
+    const ux=bx-ax, uy=by-ay, uz=bz-az, vx=cx-ax, vy=cy-ay, vz=cz-az;
+    const nx=uy*vz-uz*vy, ny=uz*vx-ux*vz, nz=ux*vy-uy*vx;
+    const area2 = nx*nx+ny*ny+nz*nz;
+    if (area2 < 1e-9){ removed++; continue; }   // 仅删除严格零面积三角形
+    keep.push(a,b,c);
+  }
+  if (removed && keep.length){ g.setIndex(keep); g.computeVertexNormals(); }
+  return removed;
+}
+// 只对指定楼栋：删除跨度过大的异常三角形（倒三角/尖刺），最大边 > 25 m
+function stripLongTriangles(o, MAXEDGE = 25){
+  const g = o.geometry; if (!g || !g.index) return;
+  const pos = g.attributes.position, idxA = g.index, n = idxA.count / 3;
+  const keep = [];
+  for (let t = 0; t < n; t++){
+    const a = idxA.getX(t*3), b1 = idxA.getX(t*3+1), c1 = idxA.getX(t*3+2);
+    const ax = pos.getX(a), ay = pos.getY(a), az = pos.getZ(a);
+    const bx = pos.getX(b1), by = pos.getY(b1), bz = pos.getZ(b1);
+    const cx = pos.getX(c1), cy = pos.getY(c1), cz = pos.getZ(c1);
+    const d = Math.max(Math.hypot(ax-bx, ay-by, az-bz), Math.hypot(bx-cx, by-cy, bz-cz), Math.hypot(cx-ax, cy-ay, cz-az));
+    if (d <= MAXEDGE) keep.push(a, b1, c1);
+  }
+  if (keep.length < idxA.count){ g.setIndex(keep); g.computeBoundingSphere(); }
+}
+
+function stripLongEdges(mesh, maxLen){
+  const g = mesh.geometry, pos = g && g.attributes && g.attributes.position;
+  if (!pos) return 0;
+  let idxArr;
+  if (g.index) idxArr = g.index.array;
+  else { const n = pos.count; idxArr = new Uint32Array(n); for (let i = 0; i < n; i++) idxArr[i] = i; }
+  const keep = []; let removed = 0;
+  const d2 = (a, b) => {
+    const dx = pos.getX(a)-pos.getX(b), dy = pos.getY(a)-pos.getY(b), dz = pos.getZ(a)-pos.getZ(b);
+    return dx*dx + dy*dy + dz*dz;
+  };
+  const lim = maxLen * maxLen;
+  for (let t = 0; t < idxArr.length; t += 3){
+    const a = idxArr[t], b = idxArr[t+1], c = idxArr[t+2];
+    if (d2(a,b) > lim || d2(b,c) > lim || d2(c,a) > lim){ removed++; continue; }
+    keep.push(a,b,c);
+  }
+  if (removed && keep.length){ g.setIndex(keep); g.computeVertexNormals(); }
+  return removed;
+}
+function removeNeedles(mesh){
+  const g = mesh.geometry; if (!g || !g.attributes || !g.attributes.position) return 0;
+  const pos = g.attributes.position;
+  let idxArr;
+  if (g.index) idxArr = g.index.array;
+  else { const n = pos.count; idxArr = new Uint32Array(n); for (let i = 0; i < n; i++) idxArr[i] = i; }
+  const triCount = idxArr.length / 3;
+  const keep = [];
+  let removed = 0;
+  const A = new THREE.Vector3(), B = new THREE.Vector3(), C = new THREE.Vector3();
+  for (let t = 0; t < triCount; t++){
+    const ia = idxArr[t*3], ib = idxArr[t*3+1], ic = idxArr[t*3+2];
+    A.fromBufferAttribute(pos, ia); B.fromBufferAttribute(pos, ib); C.fromBufferAttribute(pos, ic);
+    const e1 = A.distanceTo(B), e2 = B.distanceTo(C), e3 = C.distanceTo(A);
+    const mx = Math.max(e1, e2, e3), mn = Math.min(e1, e2, e3);
+    // 细长/退化三角形（压缩后常见的黑色尖刺）
+    if ((mx > 3 && mn < 0.03) || (mx > 1 && mx / Math.max(mn, 1e-6) > 400)){ removed++; continue; }
+    keep.push(ia, ib, ic);
+  }
+  if (removed > 0 && keep.length){
+    g.setIndex(keep);
+    g.computeVertexNormals();
+  }
+  return removed;
+}
+function setHud(mode, loadingText){
+  if (!procEl) return;
+  if (loadingText){
+    procEl.textContent = loadingText;
+    procEl.style.color = '#ff2d2d';
+    procEl.style.fontSize = '20px';
+    if (swEl) swEl.innerHTML = '';
+    return;
+  }
+  procEl.textContent = MODE_NAME[mode] || '原始外观';
+  procEl.style.color = '#ff2d2d';
+  procEl.style.fontSize = '26px';
+  const cols = MODE_COLORS[mode] || [];
+  const labels = ['完成', '施工中', '未施工'];
+  if (swEl) swEl.innerHTML = cols.map((c, i) =>
+    '<span style="display:inline-flex;align-items:center;gap:5px;margin-right:10px">' +
+      '<span style="display:inline-block;width:20px;height:20px;border-radius:3px;background:' + c + ';border:1px solid rgba(0,0,0,.4)"></span>' +
+      '<span style="font-size:14px;color:#fff">' + labels[i] + '</span>' +
+    '</span>').join('');
+}
+const msg = { set textContent(v){ setHud(null, v); } };
+// —— 手机布局：最左竖排、透明按钮（先执行，不等模型加载）——
+function applyMobileLayout(){
+  const el = document.getElementById('modes'); if (!el) return;
+  const mob = innerWidth <= 900 || /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+  if (!mob) return;
+  el.style.position = 'fixed';
+  el.style.left = '0px';
+  el.style.right = '0px';
+  el.style.top = 'auto';
+  el.style.bottom = '10px';
+  el.style.transform = 'none';
+  el.style.display = 'flex';
+  el.style.flexDirection = 'row';
+  el.style.flexWrap = 'wrap';
+  el.style.alignItems = 'center';
+  el.style.justifyContent = 'center';
+  el.style.background = 'transparent';
+  el.style.padding = '0 8px';
+  el.style.gap = '6px';
+  el.style.overflow = 'visible';
+  el.style.borderRadius = '0';
+  for (const b of el.querySelectorAll('button')){
+    b.style.writingMode = 'horizontal-tb';
+    b.style.textOrientation = 'mixed';
+    b.style.letterSpacing = '.5px';
+    b.style.padding = '7px 10px';
+    b.style.fontSize = '13px';
+    b.style.lineHeight = '1.1';
+    b.style.whiteSpace = 'nowrap';
+    b.style.flex = '0 0 auto';
+    b.style.borderRadius = '7px';
+    b.style.background = '#ffffff';
+    b.style.color = '#111111';
+    b.style.border = '1px solid rgba(0,0,0,.25)';
+    b.style.width = 'auto';
+    b.style.boxShadow = '0 1px 4px rgba(0,0,0,.35)';
+    b.style.textShadow = 'none';
+  }
+}
+window.applyMobileLayout = applyMobileLayout;
+applyMobileLayout();
+setTimeout(applyMobileLayout, 100);
+setTimeout(applyMobileLayout, 800);
+setTimeout(applyMobileLayout, 2500);
+addEventListener('resize', applyMobileLayout);
+addEventListener('orientationchange', () => setTimeout(applyMobileLayout, 250));
+const loader = new GLTFLoader();
+const draco = new DRACOLoader(); draco.setDecoderPath('./lib/draco/'); loader.setDRACOLoader(draco);
+const M = {
+  nei_done: new THREE.MeshStandardMaterial({ color: 0x1857c9, roughness: .85 }),
+  nei_ing:  new THREE.MeshStandardMaterial({ color: 0x8ede6a, roughness: .85 }),
+  wai_done: new THREE.MeshStandardMaterial({ color: 0xe01b1b, roughness: .85 }),
+  wai_ing:  new THREE.MeshStandardMaterial({ color: 0xf2c200, roughness: .85 }),
+  none:     new THREE.MeshStandardMaterial({ color: 0x9e9e9e, roughness: .9 }),
+  roof_done: new THREE.MeshStandardMaterial({ color: 0x6b4f2a, roughness: .9 }),
+  roof_ing:  new THREE.MeshStandardMaterial({ color: 0xc9a227, roughness: .9 })
+};
+for (const k in M){ M[k].side = 2; M[k].needsUpdate = true; }   // 双面，避免翻面出现黑洞
+const glbCache = {};
+function loadGLB(name){ return glbCache[name] ||= new Promise((res, rej) => loader.load('./assets/'+name+'.glb', g => res(g), undefined, rej)); }
+function makeLabel(text, color){
+  const lines = String(text).split('\n');
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const ctx = c.getContext('2d');
+  const fontOf = (sz) => 'bold ' + sz + 'px "Microsoft YaHei",sans-serif';
+  // 主行：栋号/名称
+  let fs1 = 110;
+  ctx.font = fontOf(fs1);
+  let w1 = ctx.measureText(lines[0]).width;
+  if (w1 > 222) fs1 = Math.max(46, Math.floor(fs1 * 222 / w1));
+  // 次行：工区
+  const fs2 = Math.round(fs1 * 0.56);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const y1 = lines.length > 1 ? 92 : 128;
+  const y2 = 190;
+  ctx.font = fontOf(fs1);
+  ctx.lineWidth = 12; ctx.strokeStyle = 'rgba(0,0,0,.85)';
+  ctx.strokeText(lines[0], 128, y1);
+  ctx.fillStyle = color || '#ffd34d'; ctx.fillText(lines[0], 128, y1);
+  if (lines.length > 1){
+    ctx.font = fontOf(fs2);
+    ctx.lineWidth = 10; ctx.strokeStyle = 'rgba(0,0,0,.85)';
+    ctx.strokeText(lines[1], 128, y2);
+    ctx.fillStyle = color || '#cfe3ff'; ctx.fillText(lines[1], 128, y2);
+  }
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
+  sp.scale.set(10, 10, 1); return sp;
+}
+window.progressData = {}; window.floorsData = {};
+const buildings = [];
+const GLASS_RE = /glass|透明|窗|幕墙|玻璃/i;
+function maxFloorOf(b){
+  const pd = progressData[b] || {nei:{}, wai:{}};
+  let mx = 0;
+  for (const k of Object.keys(pd.nei)) mx = Math.max(mx, parseInt(k,10)||0);
+  for (const k of Object.keys(pd.wai)) mx = Math.max(mx, parseInt(k,10)||0);
+  return mx || 1;
+}
+function floorOf(b, y){
+  const bd = buildings.find(x => x.name === b);
+  const lv = (floorsData[b] || []).slice().sort((a,c)=>a-c);
+  const N = maxFloorOf(b);
+  if (lv.length >= 3){
+    let k = 1;
+    for (const l of lv) if (y >= l - 0.8) k++;
+    return Math.min(N, Math.max(1, k - 1));
+  }
+  // 回退：按楼高均分 N 层
+  if (!bd) return 1;
+  const t = (y - bd.box.min.y) / Math.max(1e-6, (bd.box.max.y - bd.box.min.y));
+  return Math.min(N, Math.max(1, Math.ceil(t * N)));
+}
+let roofData = window.roofData || {};
+function isRoof(b, y){
+  const lv = (floorsData[b] || []).slice().sort((a,c)=>a-c);
+  if (!lv.length) return false;
+  const top = lv[lv.length - 1];
+  return y >= top - 2.5;
+}
+function applyMode(m){
+  for (const b of buildings){
+    const pd = progressData[b.name] || { nei:{}, wai:{} };
+    for (const it of b.meshes){
+      const nm = (it.orig && it.orig.name) || '';
+      const isGlass = GLASS_RE.test(nm);
+      if (m === 'orig'){ it.mesh.material = it.orig; continue; }
+      // 屋面优先判定：屋面（含采光顶玻璃）先染色，避免被“门窗/玻璃不染色”规则挡掉
+      if (it.isRoof && m.startsWith('roof')){
+        const rd0 = roofData[b.name] || {};
+        const key0 = m === 'rooffs' ? 'fangshui' : (m === 'roofbh' ? 'baohu' : 'guawa');
+        const st0 = rd0[key0] || '—';
+        if (m === 'roofgw') it.mesh.material = (st0 === '完成') ? M.roof_done : it.orig;
+        else it.mesh.material = st0 === '完成' ? M.roof_done : (st0 === '施工中' ? M.roof_ing : it.orig);
+        continue;
+      }
+      if (isGlass || it.isWin){ it.mesh.material = it.orig; continue; }
+      const box = new THREE.Box3().setFromObject(it.mesh);
+      const y = (box.min.y + box.max.y) / 2;
+      if (it.isRoof){
+        if (m.startsWith('roof')){
+          const rd = roofData[b.name] || {};
+          const key = m === 'rooffs' ? 'fangshui' : (m === 'roofbh' ? 'baohu' : 'guawa');
+          const st = rd[key] || '—';
+          if (m === 'roofgw'){
+            // 挂瓦：只染已完成的，没挂瓦的保持原始外观
+            it.mesh.material = (st === '完成') ? M.roof_done : it.orig;
+          } else {
+            it.mesh.material = st === '完成' ? M.roof_done : (st === '施工中' ? M.roof_ing : it.orig);
+          }
+        } else it.mesh.material = it.orig;
+        continue;
+      }
+      if (m.startsWith('roof')){ it.mesh.material = it.orig; continue; }
+      const f = floorOf(b.name, y);
+      const st = (m === 'nei' ? pd.nei : pd.wai)[String(f)] || '';
+      if (st === '完成') it.mesh.material = (m === 'nei' ? M.nei_done : M.wai_done);
+      else if (st === '施工中') it.mesh.material = (m === 'nei' ? M.nei_ing : M.wai_ing);
+      else it.mesh.material = it.orig;
+    }
+  }
+  setHud(m);
+  updateLegend(m);
+}
+const ZONES = {
+  '一工区': ['26','27','28','35','42','51','S10','S11','S5'],
+  '二工区': ['29','30','36','37','43','44','52','S12'],
+  '三工区': ['31','38','45','46','53','54','55','S13']
+};
+function zoneStats(){
+  const rows = [];
+  for (const [z, list] of Object.entries(ZONES)){
+    let neiDone = 0, neiTot = 0, waiDone = 0, waiTot = 0, fsDone = 0, bhDone = 0, gwDone = 0, bTot = 0;
+    let fsDen = 0, bhDen = 0, gwDen = 0;
+    for (const b of list){
+      const pd = progressData[b]; if (!pd) continue;
+      for (const st of Object.values(pd.nei || {})) { neiTot++; if (st === '完成') neiDone++; }
+      for (const st of Object.values(pd.wai || {})) { waiTot++; if (st === '完成') waiDone++; }
+      const rd = (window.roofData || {})[b] || {};
+      bTot++;
+      fsDen++; if (rd.fangshui === '完成') fsDone++;
+      bhDen++; if (rd.baohu === '完成' && rd.fangshui === '完成') bhDone++;
+      gwDen++; if (rd.guawa === '完成' && rd.baohu === '完成') gwDone++;
+    }
+    const p = (a, b) => b ? Math.round(100 * a / b) : 0;
+    rows.push([z, p(neiDone, neiTot), p(waiDone, waiTot), p(fsDone, fsDen), p(bhDone, bhDen), p(gwDone, gwDen)]);
+  }
+  return rows;
+}
+function updateLegend(m){
+  const el = document.getElementById('legend'); if (!el) return;
+  const cols = (typeof MODE_COLORS !== 'undefined' && MODE_COLORS[m]) ? MODE_COLORS[m] : [];
+  if (!cols.length){ el.innerHTML = ''; el.style.display = 'none'; return; }
+  el.style.display = 'block';
+  const lb = ['完成', '施工中', '未施工'];
+  el.innerHTML = cols.map((c, i) => '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">' +
+    '<span style="display:inline-block;width:22px;height:22px;border-radius:3px;background:' + c + ';border:1px solid rgba(0,0,0,.4)"></span>' +
+    '<span style="color:#fff;font-size:13px">' + lb[i] + '</span></div>').join('');
+  el.style.background = 'transparent';
+  el.style.padding = '0';
+}
+function renderZones(){
+  const el = document.getElementById('zones'); if (!el) return;
+  const rows = zoneStats();
+  let html = '<b>各工区完成比例</b><table><tr><th>工区</th><th>内粉</th><th>外粉</th><th>屋面<br>防水</th><th>屋面<br>防水保护层</th><th>屋面<br>挂瓦</th></tr>';
+  for (const r of rows) html += '<tr><td>' + r[0] + '</td><td>' + r[1] + '%</td><td>' + r[2] + '%</td><td>' + r[3] + '%</td><td>' + r[4] + '%</td><td>' + r[5] + '%</td></tr>';
+  html += '</table>';
+  el.innerHTML = html;
+}
+window.renderZones = renderZones;
+window.updateLegend = updateLegend;
+window.applyMode = applyMode;
+Promise.all([
+  fetch('./buildings.json').then(r=>r.json()),
+  fetch('./progress.json').then(r=>r.json()),
+  fetch('./floors.json').then(r=>r.json()),
+  fetch('./roof.json').then(r=>r.json())
+]).then(async ([bj, pg, fl, rf]) => {
+  window.roofData = rf;
+  window.progressData = pg; window.floorsData = fl; window.roofData = rf; roofData = rf;
+  const names = Object.keys(bj); let done = 0;
+  for (const b of names){
+    const buildingName = b;
+    const info = bj[b];
+    const glb = await loadGLB(info.stem.replace(/#/g,''));
+    const obj = glb.scene.clone(true);
+    obj.applyMatrix4(new THREE.Matrix4().fromArray(info.m));
+    scene.add(obj);
+    const box0 = new THREE.Box3().setFromObject(obj);
+    const meshes = [];
+    
+    const lv = (floorsData[b] || []).slice().sort((p,q)=>p-q);
+    const roofTop = lv.length ? lv[lv.length-1] : box0.max.y;
+    const cutY = roofTop + 0.6;
+    obj.traverse(o => {
+      if (!o.isMesh) return;
+      stripDegenerate(o);
+      if (buildingName === 'S12' || buildingName === 'S13') stripLongTriangles(o);
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      for (const mm of mats){ if (mm){ mm.side = 2; mm.needsUpdate = true; } }   // 双面渲染，避免背面纯黑
+      meshes.push({ mesh: o, orig: o.material });
+      // 记录大尺寸半透明面片（外架/挑檐/玻璃幕），用于“外架”开关
+      try {
+        const mm = Array.isArray(o.material) ? o.material[0] : o.material;
+        if (mm && mm.transparent && mm.opacity < 0.95){
+          const bb = new THREE.Box3().setFromObject(o);
+          const sz = bb.getSize(new THREE.Vector3());
+          if (Math.max(sz.x, sz.z) > 18){ (window.__sheetMeshes = window.__sheetMeshes || []).push(o); }
+        }
+      } catch(e){}
+    });
+    const box = new THREE.Box3().setFromObject(obj);
+    const bH = Math.max(1e-6, box.max.y - box.min.y);
+    for (const it of meshes){
+      const mb = new THREE.Box3().setFromObject(it.mesh);
+      it.hRatio = (mb.max.y - mb.min.y) / bH;
+      it.isWin = it.hRatio > 0.55;   // 跨越多层的整体门窗网格
+      const roofTol = (b === 'S11') ? 3.6 : 1.5;   // 屋面识别容差（S11 屋面在女儿墙下 3.2 m，单独放宽）
+      const ext = mb.max.y - mb.min.y;
+      it.isRoof = (mb.max.y >= box.max.y - roofTol) && (ext <= Math.max(2.5, bH * 0.36));
+    }
+    // 移除“倒三角”构件：43 号楼（及同模板 42/45）里的 87335342_2 是那块大三角面片
+    for (const it of meshes){
+      const nm = (it.mesh.name || '');
+      if (nm.indexOf('87335342_2') === 0){ it.mesh.visible = false; window.__spikeHidden = (window.__spikeHidden || 0) + 1; }
+    }
+    buildings.push({ name: b, root: obj, meshes, box });
+    const ctr = box.getCenter(new THREE.Vector3());
+    const labelLift = (b === 'S12' || b === 'S13') ? -19.6 : 1.6;   // S12/S13 标注再降 10 m
+    const ZONE_OF = { '26':'一工区','27':'一工区','28':'一工区','35':'一工区','42':'一工区','51':'一工区','S10':'一工区','S11':'一工区','S5':'一工区',
+                      '29':'二工区','30':'二工区','36':'二工区','37':'二工区','43':'二工区','44':'二工区','52':'二工区','S12':'二工区',
+                      '31':'三工区','38':'三工区','45':'三工区','46':'三工区','53':'三工区','54':'三工区','55':'三工区','S13':'三工区' };
+    const baseName = (b === 'S5') ? 'S5幼儿园'
+                    : (b === 'S10' || b === 'S11' || b === 'S12' || b === 'S13') ? (b + '商业')
+                    : (b + '#');
+    const labelText = baseName + (ZONE_OF[b] ? ('\n' + ZONE_OF[b]) : '');
+    const ZONE_COLOR = { '一工区': '#FFD34D', '二工区': '#6FD3FF', '三工区': '#FF8A4C' };
+    const sp = makeLabel(labelText, ZONE_COLOR[ZONE_OF[b]] || '#ffd34d'); sp.position.set(ctr.x, box.max.y + labelLift, ctr.z);
+    if (b === 'S12' || b === 'S13') sp.position.z -= 10;   // 标注往北移 10 m
+    (window.__labels = window.__labels || {})[b] = sp;
+    scene.add(sp);
+    done++; msg.textContent = '加载中… ' + done + '/' + names.length;
+  }
+  window.__buildings = buildings;
+  // 固定视角（与 Blender 渲染_修正复核_20261108 一致）
+  // 俯视 45° + 缓慢自动旋转（按实际包围盒拟合，手机竖屏也能看全）
+  camera.fov = 32;
+  camera.updateProjectionMatrix();
+  const azim = Math.PI * 62 / 180;
+  const el = Math.PI / 4;
+  const allBox = new THREE.Box3();
+  for (const b of buildings) allBox.expandByObject(b.root);
+  const ctr = allBox.getCenter(new THREE.Vector3());
+  const size = allBox.getSize(new THREE.Vector3());
+  const R = 0.5 * Math.sqrt(size.x*size.x + size.y*size.y + size.z*size.z);
+  function placeCamera(){
+    const vfov = camera.fov * Math.PI / 180;
+    const hfov = 2 * Math.atan(Math.tan(vfov/2) * camera.aspect);
+    const minHalf = Math.min(vfov, hfov) / 2;
+    const fitK = camera.aspect < 0.8 ? 0.78 : 1.02;   // 竖屏允许左右稍微裁掉一点，让楼更大
+    const dist = Math.max(320, R / Math.sin(minHalf) * fitK);
+    camera.position.set(ctr.x + dist*Math.cos(el)*Math.cos(azim), ctr.y + dist*Math.sin(el), ctr.z - dist*Math.cos(el)*Math.sin(azim));
+    controls.target.copy(ctr);
+    controls.update();
+  }
+  window.refitCamera = placeCamera;
+  camera.aspect = vpW()/vpH(); camera.updateProjectionMatrix();
+  renderer.setSize(vpW(), vpH());
+  placeCamera();
+  setTimeout(() => { camera.aspect = vpW()/vpH(); camera.updateProjectionMatrix(); placeCamera(); }, 500);
+  // 锁定俯视 45°：只允许绕垂直线旋转 + 缩放，不能翻转
+  controls.minPolarAngle = Math.PI / 6;   // 仰角 60°
+  controls.maxPolarAngle = Math.PI / 3;   // 仰角 30°
+  controls.enablePan = false;
+  controls.minDistance = 260;
+  controls.maxDistance = 2200;
+  controls.autoRotate = true;
+  controls.autoRotateSpeed = 0.45;
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.update();
+  window.roofData = window.roofData || window.__roof || {};
+  renderZones();
+  window.fixModesPos = function(){
+  const el = document.getElementById('modes'); if (!el) return;
+  const mob = innerWidth <= 900 || /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+  if (mob){
+    el.style.cssText = 'position:fixed;left:0;right:auto;top:160px;bottom:auto;transform:none;display:flex;flex-direction:column;flex-wrap:nowrap;background:transparent;padding:0;gap:4px;overflow:visible;align-items:flex-start';
+    for (const b of el.querySelectorAll('button')){
+      b.style.cssText = 'writing-mode:vertical-rl;text-orientation:upright;letter-spacing:2px;padding:4px 2px;font-size:11px;line-height:1.05;white-space:normal;flex:0 0 auto;border-radius:4px;background:transparent;color:#fff;border:1px solid rgba(255,255,255,.35);width:20px;text-shadow:0 0 3px rgba(0,0,0,.95),0 0 6px rgba(0,0,0,.7)';
+    }
+  }
+};
+setTimeout(window.fixModesPos, 50);
+addEventListener('resize', window.fixModesPos);
+const BB = new THREE.Box3();
+  for (const b of buildings) BB.expandByObject(b.root);
+  const BC = BB.getCenter(new THREE.Vector3());
+  const BS = BB.getSize(new THREE.Vector3());
+  const BR = 0.5 * Math.sqrt(BS.x*BS.x + BS.y*BS.y + BS.z*BS.z);
+  const AZ = Math.PI * 62 / 180, EL = Math.PI / 4;
+  // 平移范围限定在小区范围内
+  window.PAN = {
+    minX: BC.x - 100, maxX: BC.x + 100,
+    minZ: BC.z - 100, maxZ: BC.z + 100,
+    minY: BC.y - 100, maxY: BC.y + 100
+  };
+  const isMobileLike = innerWidth <= 900 || /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 0);
+  controls.enablePan = isMobileLike;
+  controls.screenSpacePanning = true;
+  window.refitCamera = function(){
+    const vfov = camera.fov * Math.PI / 180;
+    const hfov = 2 * Math.atan(Math.tan(vfov/2) * camera.aspect);
+    const minHalf = Math.min(vfov, hfov) / 2;
+    const fitK = camera.aspect < 0.8 ? 0.80 : 1.02;
+    const D = Math.max(320, Math.min(3000, BR / Math.sin(minHalf) * fitK));
+    const horiz = D * Math.cos(EL);
+    controls.target.copy(BC);
+    camera.position.set(BC.x + horiz*Math.cos(AZ), BC.y + D*Math.sin(EL), BC.z - horiz*Math.sin(AZ));
+    camera.updateProjectionMatrix();
+    controls.update();
+  };
+  window.refitCamera();
+  applyMode('orig');
+}).catch(e => { msg.textContent = '加载失败: ' + e.message; console.error(e); });
+const CYCLE = ['nei', 'wai', 'rooffs', 'roofgw'];
+let cyc = 0;
+let autoTimer = setInterval(() => { cyc = (cyc + 1) % CYCLE.length; applyMode(CYCLE[cyc]); }, 10000);
+window.stopCycle = function(){ clearInterval(autoTimer); };
+document.getElementById('btnScaffold')?.addEventListener('click', function(ev){
+  const arr = window.__sheetMeshes || [];
+  const hide = !window.__sheetHidden;
+  window.__sheetHidden = hide;
+  arr.forEach(function(m){ m.visible = !hide; });
+  ev.target.textContent = '外架：' + (hide ? '隐藏' : '显示');
+});
+document.getElementById('modes').addEventListener('click', ev => {
+  const m = ev.target && ev.target.dataset && ev.target.dataset.mode;
+  if (m) { window.stopCycle && window.stopCycle(); applyMode(m); }
+});
+function onResize(){
+  camera.aspect = vpW()/vpH(); camera.updateProjectionMatrix();
+  renderer.setSize(vpW(), vpH());
+  if (window.refitCamera) window.refitCamera();
+}
+if (window.ResizeObserver) { try { new ResizeObserver(onResize).observe(document.documentElement); } catch(e){} }
+setTimeout(onResize, 400);
+setTimeout(onResize, 1500);
+addEventListener('resize', onResize);
+addEventListener('orientationchange', () => setTimeout(onResize, 300));
+function clampPan(){
+  const P = window.PAN, t = controls.target;
+  if (!P) return;
+  const cx = Math.min(P.maxX, Math.max(P.minX, t.x));
+  const cy = Math.min(P.maxY, Math.max(P.minY, t.y));
+  const cz = Math.min(P.maxZ, Math.max(P.minZ, t.z));
+  if (cx !== t.x || cy !== t.y || cz !== t.z){
+    camera.position.x += cx - t.x;
+    camera.position.y += cy - t.y;
+    camera.position.z += cz - t.z;
+    t.set(cx, cy, cz);
+  }
+}
+(function loop(){ requestAnimationFrame(loop); controls.update(); clampPan(); renderer.render(scene, camera); })();
+</script>
+
+<style>
+#kpi{position:fixed;left:50%;top:8px;transform:translateX(-50%);display:flex;gap:8px;z-index:20;background:rgba(8,18,30,.72);padding:6px 10px;border-radius:10px;color:#fff;font:12px system-ui;white-space:nowrap}
+#kpi .k{background:rgba(255,255,255,.07);padding:4px 9px;border-radius:7px}
+#kpi .k b{color:#ffd34d;font-size:14px}
+#boardLeft{position:fixed;left:8px;bottom:96px;z-index:20;background:rgba(8,18,30,.82);border:1px solid rgba(120,170,230,.25);border-radius:10px;padding:8px 9px;color:#dfe9f7;font:11px system-ui;max-height:46vh;overflow:auto}
+#boardLeft table{border-collapse:collapse}
+#boardLeft th,#boardLeft td{padding:2px 5px;text-align:center}
+#boardLeft th{color:#9fd0ff;font-weight:600;font-size:10px}
+#boardLeft td:first-child{text-align:left;color:#cfe3ff}
+#boardPlan{position:fixed;left:50%;transform:translateX(-50%);bottom:74px;z-index:19;background:rgba(8,18,30,.86);border:1px solid rgba(120,170,230,.28);border-radius:10px;padding:6px 9px;color:#e8f0fa;font:11px system-ui;max-width:min(96vw,760px);overflow:auto}
+#boardPlan table{border-collapse:collapse}
+#boardPlan th,#boardPlan td{padding:2px 7px;text-align:center;white-space:nowrap}
+#boardPlan th{color:#9fd0ff;font-weight:600;font-size:10px}
+#boardPlan td:first-child{text-align:left;color:#cfe3ff}
+#boardRight{position:fixed;right:8px;top:70px;width:250px;z-index:20;background:rgba(8,18,30,.86);border:1px solid rgba(120,170,230,.28);border-radius:10px;padding:10px;color:#e8f0fa;font:12px/1.6 system-ui;display:none;max-height:70vh;overflow:auto}
+#boardRight h3{margin:0 0 6px;font-size:15px;color:#ffd34d}
+#boardRight .row{display:flex;justify-content:space-between;border-bottom:1px dashed rgba(255,255,255,.12);padding:2px 0}
+#boardRight .tag{display:inline-block;padding:1px 6px;border-radius:5px;background:#2b6cb0;font-size:10px;margin-left:4px}
+#boardRight .issue{color:#ff9a9a;font-size:11px;margin-top:4px}
+#boardTip{position:fixed;right:8px;top:36px;z-index:20;color:#9fd0ff;font:11px system-ui;background:rgba(8,18,30,.7);padding:3px 8px;border-radius:6px}
+@media (max-width: 900px){
+  #boardLeft{display:none} #boardRight{width:46vw;top:120px} #kpi{font-size:10px;gap:4px;padding:4px 6px} #kpi .k b{font-size:12px} }
+
+/* mobile overrides (must be after board styles) */
+@media (max-width: 900px){
+  #kpi{left:6px !important;right:6px !important;bottom:150px !important;top:auto !important;transform:none !important;overflow-x:auto;justify-content:flex-start;gap:6px;padding:5px 6px;width:auto !important;height:auto !important;flex-wrap:nowrap}
+  #kpi .k{flex:0 0 auto;font-size:10px;padding:3px 7px}
+  #kpi .k b{font-size:12px}
+  #boardTip{display:none !important}
+  #boardRight{top:auto !important;bottom:200px !important;right:6px !important;width:58vw !important;max-height:38vh;font-size:11px}
+  #boardLeft{display:none !important}
+}
+</style>
+<div id="kpi"></div>
+<div id="boardRight"></div>
+<div id="boardPlan"></div>
+<div id="boardTip">点击楼栋查看详情</div>
+<div id="boardLeft"></div>
+<script type="module">
+const D = await fetch('./dashboard.json?v=' + Date.now()).then(r => r.json()).catch(() => null);
+if (D){
+  const kpi = D.kpi;
+  const items = [
+    ['总进度', kpi.progress_pct + '%'],
+    ['内粉', kpi['内墙抹灰'] + '%'],
+    ['外粉', kpi['外墙抹灰'] + '%'],
+    ['屋面防水', kpi['屋面防水'] + '%'],
+    ['屋面瓦', kpi['屋面瓦'] + '%'],
+    ['楼栋', kpi.buildings + ' 栋'],
+    ['未闭环', D.issues.length + ' 项'],
+  ];
+  document.getElementById('kpi').innerHTML = items.map(([k,v]) => '<div class="k">' + k + ' <b>' + v + '</b></div>').join('');
+  // 左侧：工区×工序热力表
+  const procs = ['墙体砌筑','构造柱浇筑','内墙保温','内墙抹灰','外墙抹灰','外墙防水','外墙涂料','外架拆除','地坪','屋面防水','屋面瓦'];
+  const zones = ['一工区','二工区','三工区'];
+  const map = {};
+  D.zone_process.forEach(z => { map[z.zone + '|' + z.process] = z.pct; });
+  const color = p => p == null ? '#3a4655' : p >= 80 ? '#2f9e44' : p >= 40 ? '#f2c200' : p > 0 ? '#e8743b' : '#5a6473';
+  let html = '<table><tr><th>工序</th>' + zones.map(z => '<th>' + z + '</th>').join('') + '</tr>';
+  procs.forEach(p => {
+    html += '<tr><td>' + p + '</td>' + zones.map(z => {
+      const v = map[z + '|' + p];
+      return '<td style="background:' + color(v) + ';color:#08121e;font-weight:600">' + (v == null ? '-' : v) + '</td>';
+    }).join('') + '</tr>';
+  });
+  html += '</table><div style="margin-top:6px;color:#9fb3c8;font-size:10px">单位：%完成（完成层/总层）</div>';
+  document.getElementById('boardLeft').innerHTML = html;
+
+  // 点击楼栋
+  const ray = new window.__THREE.Raycaster();
+  const ndc = new window.__THREE.Vector2();
+  const canvasEl = document.querySelector('canvas');
+  (canvasEl || window).addEventListener('click', (ev) => {
+    const el = ev.target;
+    if (!el || el.tagName !== 'CANVAS') return;
+    const rect = el.getBoundingClientRect();
+    ndc.x = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
+    ndc.y = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
+    ray.setFromCamera(ndc, window.camera);
+    const list = window.__buildings || [];
+    let hit = null;
+    for (const b of list){
+      b.root.updateMatrixWorld(true);
+      const r = ray.intersectObject(b.root, true);
+      if (r.length && (!hit || r[0].distance < hit.d)) hit = { b, d: r[0].distance };
+    }
+    if (!hit){
+      const p = document.getElementById('boardRight'); if (p) p.style.display = 'none';
+      return;
+    }
+    showBuilding(hit.b.name);
+  });
+
+  function showBuilding(name){
+    const b = D.buildings[name];
+    if (!b) return;
+    const panel = document.getElementById('boardRight');
+    const line = (k, v) => '<div class="row"><span>' + k + '</span><b>' + v + '</b></div>';
+    let h = '<h3>' + name + (b.type === '住宅' ? '#' : '') + '<span class="tag">' + b.zone + '</span></h3>';
+    h += line('类型', b.type + ' / ' + b.floors + ' 层');
+    ['内墙抹灰','外墙抹灰','屋面防水','屋面瓦','地坪'].forEach(p => {
+      const d = b.proc[p];
+      if (d) h += line(p, d.pct + '%（' + d.done + '/' + d.total + '）');
+    });
+    if (b.labor_reported) h += line('近4天报工', b.labor_reported + ' 工日');
+    const iss = (D.issues || []).filter(i => i.building === name);
+    if (iss.length) h += iss.map(i => '<div class="issue">⚠ ' + i.type + '：' + i.text + '</div>').join('');
+    panel.innerHTML = h + '<div style="margin-top:8px;color:#9fb3c8;font-size:10px">点击模型空白处关闭</div>';
+    panel.style.display = 'block';
+  }
+  // ===== 计划 vs 实际 & 预测完工 =====
+  try {
+    const PF = await fetch('./plan_forecast.json?v=' + Date.now()).then(r => r.json());
+    const procs = ['内墙抹灰','外墙抹灰','屋面防水','屋面瓦','墙体砌筑','外墙防水','地坪','外架拆除'];
+    const by = {}; (PF.process_plan || []).forEach(r => by[r.process] = r);
+    const color = g => g == null ? '#5a6473' : g <= -25 ? '#e0463b' : g <= -10 ? '#e8743b' : g < 0 ? '#f2c200' : '#2f9e44';
+    let h = '<table><tr><th>工序</th><th>计划应完</th><th>实际</th><th>偏差</th><th>剩余层</th><th>峰值层/天</th><th>计划完工</th><th>预测(按峰值)</th></tr>';
+    procs.forEach(p => {
+      const r = by[p]; if (!r) return;
+      h += '<tr><td>' + p + '</td>'
+        + '<td>' + (r.plan_pct == null ? '-' : r.plan_pct + '%') + '</td>'
+        + '<td>' + r.actual + '%</td>'
+        + '<td style="color:' + color(r.gap) + ';font-weight:700">' + (r.gap == null ? '-' : (r.gap > 0 ? '+' : '') + r.gap) + '</td>'
+        + '<td>' + (r.remain_floor ?? '-') + '</td>'
+        + '<td>' + (r.speed_peak || '-') + '</td>'
+        + '<td>' + (r.plan_end || '-') + '</td>'
+        + '<td style="color:#ffd34d;font-weight:700">' + (r.forecast_peak || '无法预测') + '</td></tr>';
+    });
+    h += '</table><div style="margin-top:3px;color:#9fb3c8;font-size:10px">偏差=实际−计划(百分点)；峰值层/天=11-03~11-06 观测到的最高日完成层数；预测(按峰值)=剩余层÷峰值</div>';
+    document.getElementById('boardPlan').innerHTML = h;
+    // KPI 追加计划与预测
+    const nei = by['内墙抹灰'] || {}, wai = by['外墙抹灰'] || {};
+    const kpiEl = document.getElementById('kpi');
+    if (kpiEl) kpiEl.innerHTML += '<div class="k">内粉计划 <b>' + (nei.plan_pct ?? '-') + '%</b></div>'
+      + '<div class="k">内粉峰值 <b>' + (nei.speed_peak || '-') + ' 层/天</b></div>'
+      + '<div class="k">内粉预测(峰值) <b>' + (nei.forecast_peak || '-') + '</b></div>';
+  } catch (e) {}
+  window.__showBuilding = showBuilding;
+  window.__dashData = D;
+}
+</script>
+
+<button id="planToggle">📊 数据</button>
+<style>
+#planToggle{display:none;position:fixed;right:10px;bottom:120px;z-index:30;background:#1f3b73;color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:18px;padding:7px 12px;font-size:12px;font-family:system-ui}
+@media (max-width: 900px){ #planToggle{display:block} }
+</style>
+<script>
+(function(){
+  var mq = matchMedia('(max-width: 900px)');
+  function hideAll(){ var p=document.getElementById('boardPlan'), k=document.getElementById('kpi');
+    if(p) p.style.display='none'; if(k) k.style.display='none'; }
+  function showAll(){ var p=document.getElementById('boardPlan'), k=document.getElementById('kpi');
+    if(p) p.style.display='block'; if(k) k.style.display='flex'; }
+  if (mq.matches) setTimeout(hideAll, 3000);
+  document.getElementById('planToggle').addEventListener('click', function(){
+    var p=document.getElementById('boardPlan');
+    var visible = p && p.style.display !== 'none';
+    if (visible) hideAll(); else showAll();
+  });
+})();
+</script>
+</body></html>
