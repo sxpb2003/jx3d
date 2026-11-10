@@ -685,6 +685,64 @@ function clampPan(){
     t.set(cx, cy, cz);
   }
 }
+
+// ===== 道路图层（来自 Civil 道路/管网建模会话） =====
+let roadGroup = null, roadAlign = { deg: 0, dx: -316.5, dz: -61.7, dy: 0 };
+const LSKEY = 'roadAlign_v1';
+try { const s = localStorage.getItem(LSKEY); if (s) roadAlign = Object.assign(roadAlign, JSON.parse(s)); } catch (e) {}
+fetch('./road_align.json').then(r => r.json()).then(a => { roadAlign = Object.assign(roadAlign, a); }).catch(() => {}).finally(() => {
+fetch('./road.json').then(r => r.json()).then(D => {
+  const g = new THREE.Group();
+  // 三角面（路面/地形）
+  if (D.tri && D.tri.length) {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(D.tri, 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(D.tcol, 3));
+    geo.computeVertexNormals();
+    const mat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, transparent: true, opacity: 0.95 });
+    const m = new THREE.Mesh(geo, mat); m.renderOrder = 2; g.add(m);
+  }
+  // 线段（标线/轮廓）
+  if (D.line && D.line.length) {
+    const geo2 = new THREE.BufferGeometry();
+    geo2.setAttribute('position', new THREE.Float32BufferAttribute(D.line, 3));
+    geo2.setAttribute('color', new THREE.Float32BufferAttribute(D.lcol, 3));
+    const mat2 = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.95 });
+    const l = new THREE.LineSegments(geo2, mat2); l.renderOrder = 3; g.add(l);
+  }
+  g.visible = false;
+  applyRoadAlign(g);
+  scene.add(g);
+  roadGroup = g;
+  window.__road = g;
+}).catch(e => console.warn('道路加载失败', e));
+});
+
+function applyRoadAlign(g) {
+  const grp = g || roadGroup; if (!grp) return;
+  grp.rotation.y = -roadAlign.deg * Math.PI / 180;
+  grp.position.set(roadAlign.dx, roadAlign.dy, roadAlign.dz);
+}
+function toggleRoad(show) {
+  if (!roadGroup) return;
+  roadGroup.visible = show === undefined ? !roadGroup.visible : show;
+  const b = document.getElementById('btnRoad');
+  if (b) b.textContent = '道路：' + (roadGroup.visible ? '显示' : '隐藏');
+}
+window.__toggleRoad = toggleRoad;
+window.addEventListener('keydown', (ev) => {
+  if (!roadGroup || !roadGroup.visible) return;
+  const step = ev.shiftKey ? 0.5 : 5;
+  let ch = false;
+  if (ev.key === 'ArrowLeft') { roadAlign.dx -= step; ch = true; }
+  if (ev.key === 'ArrowRight') { roadAlign.dx += step; ch = true; }
+  if (ev.key === 'ArrowUp') { roadAlign.dz -= step; ch = true; }
+  if (ev.key === 'ArrowDown') { roadAlign.dz += step; ch = true; }
+  if (ev.key === 'q' || ev.key === 'Q') { roadAlign.deg -= 1; ch = true; }
+  if (ev.key === 'e' || ev.key === 'E') { roadAlign.deg += 1; ch = true; }
+  if (ch) { applyRoadAlign(); localStorage.setItem(LSKEY, JSON.stringify(roadAlign)); ev.preventDefault(); }
+});
+
 (function loop(){ requestAnimationFrame(loop); controls.update(); clampPan(); renderer.render(scene, camera); })();
 </script>
 </body></html>
