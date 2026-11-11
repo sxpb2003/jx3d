@@ -703,8 +703,8 @@ function clampPan(){
 }
 
 // ===== 道路图层（来自 Civil 道路/管网建模会话） =====
-let roadGroup = null, roadAlign = { deg: 0, dx: -316.5, dz: -61.7, dy: 0 };
-const LSKEY = 'roadAlign_v1';
+let roadGroup = null, roadAlign = { deg: 0, dx: -138, dz: -50, dy: 0 };
+const LSKEY = 'roadAlign_v2';
 try { const s = localStorage.getItem(LSKEY); if (s) roadAlign = Object.assign(roadAlign, JSON.parse(s)); } catch (e) {}
 fetch('./road_align.json').then(r => r.json()).then(a => { roadAlign = Object.assign(roadAlign, a); }).catch(() => {}).finally(() => {
 fetch('./road.json').then(r => r.json()).then(D => {
@@ -739,14 +739,18 @@ function applyRoadAlign(g) {
   grp.rotation.y = -roadAlign.deg * Math.PI / 180;
   grp.position.set(roadAlign.dx, roadAlign.dy, roadAlign.dz);
 }
+function roadLabel(){
+  return '道路 ' + (roadGroup && roadGroup.visible ? '显示' : '隐藏') +
+         '  dx=' + roadAlign.dx.toFixed(0) + ' dz=' + roadAlign.dz.toFixed(0) + ' 角度=' + roadAlign.deg.toFixed(0) + '°';
+}
 function toggleRoad(show) {
   if (!roadGroup) return;
   roadGroup.visible = show === undefined ? !roadGroup.visible : show;
-  // 显示道路时隐藏 CAD 底图（道路本身已表达路网）
   if (window.__cad) window.__cad.visible = !roadGroup.visible;
   const b = document.getElementById('btnRoad');
-  if (b) b.textContent = '道路：' + (roadGroup.visible ? '显示' : '隐藏');
+  if (b) b.textContent = roadLabel();
 }
+window.__roadLabel = roadLabel;
 window.__toggleRoad = toggleRoad;
 window.addEventListener('keydown', (ev) => {
   if (!roadGroup || !roadGroup.visible) return;
@@ -758,7 +762,7 @@ window.addEventListener('keydown', (ev) => {
   if (ev.key === 'ArrowDown') { roadAlign.dz += step; ch = true; }
   if (ev.key === 'q' || ev.key === 'Q') { roadAlign.deg -= 1; ch = true; }
   if (ev.key === 'e' || ev.key === 'E') { roadAlign.deg += 1; ch = true; }
-  if (ch) { applyRoadAlign(); localStorage.setItem(LSKEY, JSON.stringify(roadAlign)); ev.preventDefault(); }
+  if (ch) { applyRoadAlign(); localStorage.setItem(LSKEY, JSON.stringify(roadAlign)); const bb=document.getElementById('btnRoad'); if (bb) bb.textContent = roadLabel(); ev.preventDefault(); }
 });
 
 (function loop(){ requestAnimationFrame(loop); controls.update(); clampPan(); renderer.render(scene, camera); })();
