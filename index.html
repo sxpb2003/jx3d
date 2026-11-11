@@ -385,22 +385,31 @@ function floorOf(b, y){
   const bd = buildings.find(x => x.name === b);
   const lv = (floorsData[b] || []).slice().sort((a,c)=>a-c);
   const N = maxFloorOf(b);
-  if (lv.length >= 3){
-    let k = 1;
-    for (const l of lv) if (y >= l - 0.8) k++;
-    return Math.min(N, Math.max(1, k - 1));
+  if (lv.length >= 2){
+    const fe = lv.slice(0, N);                 // 前 N 项才是楼层标高，最后一项通常是屋面
+    const roofY = lv.length > N ? lv[N] : null;
+    if (roofY !== null && y >= roofY - 0.25) return N + 1;   // 屋面及以上：不归入任何楼层
+    let f = 0;
+    for (const e of fe) if (y >= e - 0.4) f++;
+    return Math.min(N, Math.max(1, f));
   }
-  // 回退：按楼高均分 N 层
   if (!bd) return 1;
   const t = (y - bd.box.min.y) / Math.max(1e-6, (bd.box.max.y - bd.box.min.y));
   return Math.min(N, Math.max(1, Math.ceil(t * N)));
 }
 let roofData = window.roofData || {};
+function roofTopOf(b){
+  const lv = (floorsData[b] || []).slice().sort((a,c)=>a-c);
+  if (!lv.length) return Infinity;
+  const N = maxFloorOf(b);
+  return lv.length > N ? lv[N] : lv[lv.length - 1];
+}
 function isRoof(b, y){
   const lv = (floorsData[b] || []).slice().sort((a,c)=>a-c);
   if (!lv.length) return false;
-  const top = lv[lv.length - 1];
-  return y >= top - 2.5;
+  const N = maxFloorOf(b);
+  const top = lv.length > N ? lv[N] : lv[lv.length - 1];
+  return y >= top - 1.2;
 }
 function applyMode(m){
   for (const b of buildings){
@@ -436,6 +445,9 @@ function applyMode(m){
         continue;
       }
       if (m.startsWith('roof')){ it.mesh.material = it.orig; continue; }
+      if ((m === 'nei' || m === 'wai') && y >= roofTopOf(b.name) - 1.0){
+        it.mesh.material = it.orig; continue;   // 屋面及以上不参与内/外粉染色
+      }
       const f = floorOf(b.name, y);
       const st = (m === 'nei' ? pd.nei : pd.wai)[String(f)] || '';
       if (st === '完成') it.mesh.material = (m === 'nei' ? M.nei_done : M.wai_done);
@@ -744,5 +756,10 @@ window.addEventListener('keydown', (ev) => {
 });
 
 (function loop(){ requestAnimationFrame(loop); controls.update(); clampPan(); renderer.render(scene, camera); })();
+</script>
+
+<button id="btnRoad" style="position:fixed;left:10px;bottom:96px;z-index:30;background:#26456b;color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:16px;padding:6px 12px;font:12px system-ui">道路：隐藏</button>
+<script>
+document.getElementById('btnRoad').addEventListener('click', function(){ if (window.__toggleRoad) window.__toggleRoad(); });
 </script>
 </body></html>
