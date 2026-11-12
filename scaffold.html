@@ -1,86 +1,30 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>35# 盘扣式外脚手架（样板）</title>
-<style>
-html,body{margin:0;height:100%;overflow:hidden;background:#cfd7de;font-family:system-ui,"Microsoft YaHei",sans-serif}
-#hud{position:fixed;left:10px;top:10px;color:#fff;font-size:13px;line-height:1.7;background:rgba(0,0,0,.45);padding:9px 13px;border-radius:9px}
-#hud b{color:#ffd34d;font-size:15px}
-#hud span{color:#9fd0ff}
-</style>
-<script type="importmap">{"imports":{"three":"./lib/three.module.js"}}</script>
-</head><body>
-<div id="hud"><b>35# 盘扣式外脚手架 · 密目钢板网</b><br>
-<span>立杆间距 1.5 m · 步距 1.5 m · 内排离墙 0.15 m · 排距 0.9 m · 高度=墙顶+1.6 m</span><br>
-单指拖动旋转 · 双指捏合缩放<br>
-<a href="./index.html" style="color:#7fd1ff">← 进度模型</a></div>
-<script type="module">
-import * as THREE from 'three';
-import { OrbitControls } from './lib/OrbitControls.js';
-import { GLTFLoader } from './lib/GLTFLoader.js';
-import { DRACOLoader } from './lib/DRACOLoader.js';
-
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-renderer.setSize(innerWidth, innerHeight);
-renderer.outputColorSpace = THREE.SRGBColorSpace;
-document.body.appendChild(renderer.domElement);
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x9fb3c8);
-const camera = new THREE.PerspectiveCamera(32, innerWidth/innerHeight, 0.3, 8000);
-const controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true;
-scene.add(new THREE.HemisphereLight(0xffffff, 0x8a97a5, 2.6));
-scene.add(new THREE.AmbientLight(0xffffff, 0.5));
-const d1 = new THREE.DirectionalLight(0xffffff, 1.6); d1.position.set(400, 700, 500); scene.add(d1);
-const d2 = new THREE.DirectionalLight(0xffffff, 0.7); d2.position.set(-400, 300, -500); scene.add(d2);
-
-const loader = new GLTFLoader();
-const draco = new DRACOLoader(); draco.setDecoderPath('./lib/draco/'); loader.setDRACOLoader(draco);
-
-// 密目钢板网冲孔纹理
-function meshTex(){
-  const c = document.createElement('canvas'); c.width = c.height = 128;
-  const x = c.getContext('2d');
-  x.fillStyle = '#fff'; x.fillRect(0,0,128,128);
-  x.fillStyle = '#000';
-  for (let i=0;i<8;i++) for (let j=0;j<8;j++){ x.beginPath(); x.arc(i*16+8, j*16+8, 4.0, 0, Math.PI*2); x.fill(); }
-  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(2,2); return t;
-}
-const tex = meshTex();
-
-// 只做脚手架 + 该栋楼体（35# 用 353637385455120平方米4户 模板）
-const bj = await fetch('./buildings.json').then(r=>r.json());
-const info35 = bj['35'];
-const glb = await loader.loadAsync('./assets/' + info35.stem.replace(/#/g,'') + '.glb');
-const b35 = glb.scene.clone(true);
-b35.applyMatrix4(new THREE.Matrix4().fromArray(info35.m));
-scene.add(b35);
-
-const sc = await loader.loadAsync('./scaffold_35.glb');
-sc.scene.traverse(o => {
-  if (!o.isMesh) return;
-  const nm = (o.material && o.material.name) || '';
-  const isNet = (nm.indexOf('密目') >= 0) || (o.geometry.attributes.uv && nm === '' && o.name.indexOf('密目') >= 0);
-  if (isNet){
-    o.material = new THREE.MeshStandardMaterial({ color: 0x2f8f3a, alphaMap: tex, transparent: true, alphaTest: 0.35, side: 2, roughness: .8, metalness: .1 });
-  } else { o.material.side = 2; }
-});
-scene.add(sc.scene);
-
-// 取景
-const box = new THREE.Box3().setFromObject(sc.scene);
-const ctr = box.getCenter(new THREE.Vector3());
-const size = box.getSize(new THREE.Vector3());
-const R = 0.5 * Math.sqrt(size.x*size.x + size.y*size.y + size.z*size.z);
-const vfov = camera.fov * Math.PI/180;
-const hfov = 2*Math.atan(Math.tan(vfov/2)*camera.aspect);
-const dist = R / Math.sin(Math.min(vfov,hfov)/2) * 0.95;
-controls.target.copy(ctr);
-camera.position.set(ctr.x - dist*0.55, ctr.y + dist*0.55, ctr.z + dist*0.75);
-controls.minPolarAngle = Math.PI/6; controls.maxPolarAngle = Math.PI/3;
-controls.update();
-addEventListener('resize', () => { camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
-(function loop(){ requestAnimationFrame(loop); controls.update(); renderer.render(scene, camera); })();
+<html lang="zh-CN"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>江峡三路三维进度 · 已迁移至 sxhicc.cn</title>
+<meta name="robots" content="noindex">
+<script>
+(function(){
+  var path = location.pathname.replace(/^\/jx3d\/?/, '');
+  var target = 'https://sxhicc.cn/' + path + location.search + location.hash;
+  location.replace(target);
+})();
 </script>
+<meta http-equiv="refresh" content="0; url=https://sxhicc.cn/">
+<style>
+  html,body{height:100%;margin:0;background:#0b1522;color:#e8f1fb;font:14px/1.7 system-ui,-apple-system,"Microsoft YaHei",sans-serif;
+    display:flex;align-items:center;justify-content:center;flex-direction:column;text-align:center;padding:24px}
+  a{color:#3ea6ff}
+  .box{background:#132437;border:1px solid #24405c;border-radius:14px;padding:26px 30px;max-width:420px}
+  h1{font-size:17px;margin:0 0 10px}
+  p{color:#93b4d3;margin:6px 0;font-size:13px}
+</style>
+</head><body>
+<div class="box">
+  <h1>本站已迁移</h1>
+  <p>正在跳转到新地址…</p>
+  <p><a href="https://sxhicc.cn/">https://sxhicc.cn/</a></p>
+  <p style="color:#5c7691;font-size:12px">江峡三路迁建区二期（一标段）三维进度模型</p>
+</div>
 </body></html>
