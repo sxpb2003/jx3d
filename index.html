@@ -423,7 +423,7 @@ function applyMode(m){
         const rd0 = roofData[b.name] || {};
         const key0 = m === 'rooffs' ? 'fangshui' : (m === 'roofbh' ? 'baohu' : 'guawa');
         const st0 = rd0[key0] || '—';
-        if (m === 'roofgw') it.mesh.material = (st0 === '完成') ? M.roof_done : it.orig;
+        if (m === 'roofgw') it.mesh.material = (st0 === '完成') ? M.roof_done : (st0 === '施工中' ? M.roof_ing : it.orig);
         else it.mesh.material = st0 === '完成' ? M.roof_done : (st0 === '施工中' ? M.roof_ing : it.orig);
         continue;
       }
@@ -436,8 +436,8 @@ function applyMode(m){
           const key = m === 'rooffs' ? 'fangshui' : (m === 'roofbh' ? 'baohu' : 'guawa');
           const st = rd[key] || '—';
           if (m === 'roofgw'){
-            // 挂瓦：只染已完成的，没挂瓦的保持原始外观
-            it.mesh.material = (st === '完成') ? M.roof_done : it.orig;
+            // 挂瓦：已完成的染棕、已开工（施工中）染琥珀，未开工保持原始外观
+            it.mesh.material = (st === '完成') ? M.roof_done : (st === '施工中' ? M.roof_ing : it.orig);
           } else {
             it.mesh.material = st === '完成' ? M.roof_done : (st === '施工中' ? M.roof_ing : it.orig);
           }
